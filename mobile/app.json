@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Car Health",
+    "slug": "car-health",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.michelmelo.carhealth",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": ["central"],
+          "bluetoothAlwaysPermission": "O Car Health usa Bluetooth para conectar ao adaptador OBD-II do veículo."
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/analytics"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f3bbe2d8-3c7f-430f-994c-bc620a1bf972"
+      }
+    }
+  }
+}
