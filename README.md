@@ -55,6 +55,10 @@ npx firebase deploy --only firestore:rules
 
 O app usa Firebase Authentication por e-mail/senha, Firestore por usuário e SQLite como fila local. Gastos e veículo são gravados primeiro no dispositivo e sincronizados automaticamente; cada lançamento tem um ID estável e conflitos usam o `updatedAt` mais recente.
 
+## Sprint 5
+
+Consulte [política de privacidade inicial](docs/PRIVACY_POLICY.md), [monitoramento de custos](docs/COST_MONITORING.md) e [checklist de publicação](docs/RELEASE_CHECKLIST.md). O dashboard permite exportar os dados do usuário em JSON e solicitar a exclusão da conta e dos documentos sincronizados.
+
 ## OBD-II por Bluetooth
 
 O app possui uma primeira implementação de BLE para adaptadores ELM327 compatíveis. Ela procura adaptadores, faz a sequência de inicialização do ELM327 e lê DTCs e PIDs básicos.
