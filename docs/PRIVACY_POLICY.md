@@ -4,7 +4,7 @@ Versão: 1.0 — 1º de setembro de 2026
 
 O Car Health armazena dados necessários para organizar a manutenção do veículo: conta de acesso, veículo cadastrado e lançamentos de gastos. Os dados são mantidos localmente no dispositivo e, quando há conexão, sincronizados com o Firebase/Cloud Firestore.
 
-O aplicativo coleta eventos técnicos e anônimos de uso, como criação de conta, primeiro veículo e primeiro gasto. Esses eventos não incluem e-mail, valor, categoria, descrição, placa ou quilometragem.
+O aplicativo coleta eventos técnicos e pseudônimos de uso, como criação de conta, primeiro veículo e primeiro gasto. Esses eventos não incluem e-mail, valor, categoria, descrição, placa ou quilometragem.
 
 Os dados da conta ficam separados pelo identificador do usuário. As regras do Firestore impedem que uma conta leia ou altere os dados de outra conta. Não vendemos dados pessoais nem usamos os lançamentos financeiros para publicidade.
 
@@ -12,4 +12,4 @@ O usuário pode exportar seus dados pelo aplicativo ou solicitar a exclusão da 
 
 Para dúvidas ou solicitações relacionadas à privacidade, disponibilize um endereço de contato antes da publicação nas lojas.
 
-Este documento é um ponto de partida do MVP e deve ser revisado juridicamente antes do lançamento público, especialmente para adequação à LGPD e definição do controlador, operador, retenção e canal de atendimento.
+Este documento deve ser revisado juridicamente antes do lançamento público, especialmente para adequação à LGPD e definição do controlador, operador, retenção e canal de atendimento.

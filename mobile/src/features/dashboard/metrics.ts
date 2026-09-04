@@ -1,6 +1,6 @@
 import type { Expense } from '../../data/types';
 
-export type Period = 'current' | 'previous' | 'threeMonths' | 'all';
+export type Period = 'current' | 'previous' | 'threeMonths' | 'year' | 'all';
 
 export function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -15,11 +15,16 @@ export function periodLabel(period: Period) {
     current: 'Este mês',
     previous: 'Mês anterior',
     threeMonths: 'Últimos 3 meses',
+    year: 'Este ano',
     all: 'Todo o histórico',
   }[period];
 }
 
-export function filterExpenses(expenses: Expense[], period: Period, now = new Date()) {
+export function filterExpenses<T extends Expense>(
+  expenses: T[],
+  period: Period,
+  now = new Date(),
+): T[] {
   if (period === 'all') return expenses;
   const current = monthKey(now);
   if (period === 'current')
@@ -28,15 +33,17 @@ export function filterExpenses(expenses: Expense[], period: Period, now = new Da
     const previous = monthKey(shiftMonth(now, -1));
     return expenses.filter((expense) => expense.occurredAt.startsWith(previous));
   }
+  if (period === 'year')
+    return expenses.filter((expense) => expense.occurredAt.startsWith(`${now.getFullYear()}-`));
   const firstMonth = monthKey(shiftMonth(now, -2));
   return expenses.filter((expense) => expense.occurredAt >= `${firstMonth}-01`);
 }
 
-export function totalOf(expenses: Expense[]) {
+export function totalOf(expenses: Pick<Expense, 'amountCents'>[]) {
   return expenses.reduce((total, expense) => total + expense.amountCents, 0);
 }
 
-export function categoryTotals(expenses: Expense[]) {
+export function categoryTotals(expenses: Pick<Expense, 'category' | 'amountCents'>[]) {
   const totals = new Map<string, number>();
   for (const expense of expenses) {
     const category = expense.category.trim() || 'Sem categoria';

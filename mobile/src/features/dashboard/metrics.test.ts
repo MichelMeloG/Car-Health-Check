@@ -6,6 +6,7 @@ import { categoryTotals, filterExpenses, totalOf } from './metrics';
 const expenses: Expense[] = [
   {
     id: '1',
+    vehicleId: 'vehicle_test',
     category: 'Combustível',
     amountCents: 10000,
     occurredAt: '2026-09-05',
@@ -15,6 +16,7 @@ const expenses: Expense[] = [
   },
   {
     id: '2',
+    vehicleId: 'vehicle_test',
     category: 'Manutenção',
     amountCents: 25000,
     occurredAt: '2026-08-12',
@@ -24,6 +26,7 @@ const expenses: Expense[] = [
   },
   {
     id: '3',
+    vehicleId: 'vehicle_test',
     category: 'Combustível',
     amountCents: 5000,
     occurredAt: '2026-07-20',

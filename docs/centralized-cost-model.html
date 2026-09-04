@@ -1,0 +1,28 @@
+<div id="car-health-cost-model" style="font-family:system-ui,sans-serif;color:var(--foreground);max-width:720px;margin:auto">
+  <h2>Um centro financeiro, vários tipos de evento</h2>
+  <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));margin:18px 0">
+    <button type="button" class="btn" data-kind="fuel">Abastecimento<br><span class="text-muted">litros, posto, odômetro</span></button>
+    <button type="button" class="btn" data-kind="maintenance">Manutenção<br><span class="text-muted">serviço, peças, oficina</span></button>
+    <button type="button" class="btn" data-kind="expense">Outros gastos<br><span class="text-muted">seguro, IPVA, pedágio</span></button>
+  </div>
+  <div class="card" aria-live="polite">
+    <div class="text-muted">Lançamento financeiro único</div>
+    <div class="viz-stat-value">Custo do veículo</div>
+    <div id="cost-detail">Todo evento com valor entra em Gastos. Os campos específicos continuam ligados ao evento de origem.</div>
+  </div>
+  <div style="margin-top:18px;display:grid;gap:8px">
+    <div><strong>Home</strong> → saúde, pendências e custo do mês</div>
+    <div><strong>Gastos</strong> → histórico unificado, categorias, filtros e análises</div>
+    <div><strong>Veículo</strong> → ações e contexto técnico: abastecer, registrar serviço, OBD e lembretes</div>
+  </div>
+</div>
+<script>
+  const root = document.getElementById('car-health-cost-model');
+  const detail = root.querySelector('#cost-detail');
+  const copy = {
+    fuel: 'Abastecimento cria um custo na categoria Combustível e preserva litros, preço por litro, tanque cheio e odômetro para consumo.',
+    maintenance: 'Manutenção cria um custo na categoria Manutenção e preserva serviço, oficina, peças, mão de obra, garantia e evidência.',
+    expense: 'Outros gastos entram diretamente em uma categoria financeira, com fornecedor, data, observação e odômetro opcional.'
+  };
+  root.querySelectorAll('[data-kind]').forEach((button) => button.addEventListener('click', () => { detail.textContent = copy[button.dataset.kind]; }));
+</script>

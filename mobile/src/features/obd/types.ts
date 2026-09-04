@@ -1,3 +1,5 @@
+import type { ObdDtcGroups, ObdQuality } from '../../data/types';
+
 export type ObdDevice = {
   id: string;
   name: string | null;
@@ -5,6 +7,7 @@ export type ObdDevice = {
 };
 
 export type ObdTelemetry = {
+  loadPct?: number;
   rpm?: number;
   coolantC?: number;
   voltageV?: number;
@@ -12,11 +15,18 @@ export type ObdTelemetry = {
   ltftPct?: number;
   mapKpa?: number;
   mafGps?: number;
+  speedKph?: number;
 };
 
 export type ObdSnapshot = {
   capturedAt: string;
   dtcs: string[];
+  dtcGroups: ObdDtcGroups;
   telemetry: ObdTelemetry;
   rawResponses: Record<string, string>;
+  protocol: string | null;
+  supportedPids: string[];
+  missingPids: string[];
+  pidBitmaps: Record<string, string>;
+  quality: ObdQuality;
 };

@@ -4,6 +4,7 @@ import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
   type User,
 } from 'firebase/auth';
 import {
@@ -25,6 +26,7 @@ type AuthContextValue = {
   signUp: (email: string, password: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -32,6 +34,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [profileVersion, setProfileVersion] = useState(0);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (nextUser) => {
@@ -53,8 +56,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       resetPassword: (email) => sendPasswordResetEmail(auth, email.trim()),
       logout: () => signOut(auth),
+      updateDisplayName: async (displayName) => {
+        if (!user) throw new Error('Faça login para alterar o perfil.');
+        await updateProfile(user, { displayName: displayName.trim() || null });
+        setProfileVersion((version) => version + 1);
+      },
     }),
-    [initializing, user],
+    [initializing, profileVersion, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

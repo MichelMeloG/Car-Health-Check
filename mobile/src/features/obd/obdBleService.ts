@@ -7,6 +7,17 @@ import {
   type Subscription,
 } from 'react-native-ble-plx';
 
+import { calculateSnapshotQuality } from './obdQuality';
+import {
+  ESSENTIAL_PIDS,
+  PID_DISCOVERY_COMMANDS,
+  flattenDtcs,
+  formatPid,
+  parseDtcGroups,
+  parsePidData,
+  parseSupportedPidBitmap,
+  protocolFromResponse,
+} from './obdProtocol';
 import type { ObdDevice, ObdSnapshot, ObdTelemetry } from './types';
 
 const ELM_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
@@ -14,42 +25,41 @@ const ELM_CHARACTERISTIC_UUID = '0000fff1-0000-1000-8000-00805f9b34fb';
 const DEFAULT_TIMEOUT_MS = 4_000;
 
 type Endpoint = { serviceUuid: string; writeUuid: string; notifyUuid: string };
+type SnapshotOptions = { includeDtcs?: boolean; refreshCapabilities?: boolean };
+type PendingResponse = {
+  resolve: (response: string) => void;
+  reject: (reason: Error) => void;
+  buffer: string;
+  timer: ReturnType<typeof setTimeout>;
+};
 
-function cleanHex(response: string) {
-  return response
-    .toUpperCase()
-    .replace(/\s/g, '')
-    .replace(/[^0-9A-F]/g, '');
-}
+function parseTelemetry(rawResponses: Record<string, string>) {
+  const telemetry: ObdTelemetry = {};
+  const load = parsePidData(rawResponses['0104'] ?? '', '04');
+  const coolant = parsePidData(rawResponses['0105'] ?? '', '05');
+  const stft = parsePidData(rawResponses['0106'] ?? '', '06');
+  const ltft = parsePidData(rawResponses['0107'] ?? '', '07');
+  const map = parsePidData(rawResponses['010B'] ?? '', '0B');
+  const rpm = parsePidData(rawResponses['010C'] ?? '', '0C');
+  const speed = parsePidData(rawResponses['010D'] ?? '', '0D');
+  const maf = parsePidData(rawResponses['0110'] ?? '', '10');
+  const voltage = parsePidData(rawResponses['0142'] ?? '', '42');
 
-function parsePid(response: string, pid: string) {
-  const normalized = cleanHex(response);
-  const index = normalized.indexOf(`41${pid}`);
-  return index >= 0 ? normalized.slice(index + 4) : null;
-}
+  if (load && load.length >= 2) telemetry.loadPct = (Number.parseInt(load.slice(0, 2), 16) * 100) / 255;
+  if (coolant && coolant.length >= 2)
+    telemetry.coolantC = Number.parseInt(coolant.slice(0, 2), 16) - 40;
+  if (stft && stft.length >= 2)
+    telemetry.stftPct = ((Number.parseInt(stft.slice(0, 2), 16) - 128) * 100) / 128;
+  if (ltft && ltft.length >= 2)
+    telemetry.ltftPct = ((Number.parseInt(ltft.slice(0, 2), 16) - 128) * 100) / 128;
+  if (map && map.length >= 2) telemetry.mapKpa = Number.parseInt(map.slice(0, 2), 16);
+  if (rpm && rpm.length >= 4) telemetry.rpm = Number.parseInt(rpm.slice(0, 4), 16) / 4;
+  if (speed && speed.length >= 2) telemetry.speedKph = Number.parseInt(speed.slice(0, 2), 16);
+  if (maf && maf.length >= 4) telemetry.mafGps = Number.parseInt(maf.slice(0, 4), 16) / 100;
+  if (voltage && voltage.length >= 4)
+    telemetry.voltageV = Number.parseInt(voltage.slice(0, 4), 16) / 1000;
 
-function parseDtcs(response: string) {
-  const normalized = cleanHex(response);
-  const start = normalized.indexOf('43');
-  if (start < 0) return [];
-
-  const payload = normalized.slice(start + 2);
-  const codes: string[] = [];
-  for (let index = 0; index + 3 < payload.length; index += 4) {
-    const first = Number.parseInt(payload.slice(index, index + 2), 16);
-    const second = Number.parseInt(payload.slice(index + 2, index + 4), 16);
-    if (!Number.isFinite(first) || !Number.isFinite(second) || (first === 0 && second === 0)) {
-      continue;
-    }
-
-    const prefix = ['P', 'C', 'B', 'U'][(first >> 6) & 0b11];
-    const digit1 = (first >> 4) & 0b11;
-    const digit2 = (first & 0x0f).toString(16).toUpperCase();
-    const digit3 = ((second >> 4) & 0x0f).toString(16).toUpperCase();
-    const digit4 = (second & 0x0f).toString(16).toUpperCase();
-    codes.push(`${prefix}${digit1}${digit2}${digit3}${digit4}`);
-  }
-  return [...new Set(codes)];
+  return telemetry;
 }
 
 export class ObdBleService {
@@ -58,12 +68,10 @@ export class ObdBleService {
   private endpoint: Endpoint | null = null;
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private notificationSubscription: Subscription | null = null;
-  private pendingResponse: {
-    resolve: (response: string) => void;
-    reject: (reason: Error) => void;
-    buffer: string;
-    timer: ReturnType<typeof setTimeout>;
-  } | null = null;
+  private protocol: string | null = null;
+  private supportedPids = new Set<number>();
+  private pidBitmaps: Record<string, string> = {};
+  private pendingResponse: PendingResponse | null = null;
 
   async requestPermissions() {
     if (Platform.OS !== 'android') return true;
@@ -135,43 +143,59 @@ export class ObdBleService {
     for (const command of ['ATZ', 'ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATSP0']) {
       await this.command(command, command === 'ATZ' ? 5_000 : DEFAULT_TIMEOUT_MS);
     }
+    await this.refreshCapabilities();
   }
 
-  async runSnapshot(): Promise<ObdSnapshot> {
+  async runSnapshot(options: SnapshotOptions = {}): Promise<ObdSnapshot> {
     this.ensureConnected();
-    const commands = ['03', '010C', '0105', '0142', '0106', '0107', '010B', '0110'] as const;
+    if (options.refreshCapabilities || !this.supportedPids.size) await this.refreshCapabilities();
+
     const rawResponses: Record<string, string> = {};
+    const commands = ESSENTIAL_PIDS.filter(
+      (item) => !this.supportedPids.size || this.supportedPids.has(item.pid),
+    ).map((item) => item.command);
     for (const command of commands) {
-      rawResponses[command] = await this.command(command).catch((error: Error) => error.message);
+      rawResponses[command] = await this.commandSafely(command);
     }
 
-    const telemetry: ObdTelemetry = {};
-    const rpm = parsePid(rawResponses['010C'] ?? '', '0C');
-    const coolant = parsePid(rawResponses['0105'] ?? '', '05');
-    const voltage = parsePid(rawResponses['0142'] ?? '', '42');
-    const stft = parsePid(rawResponses['0106'] ?? '', '06');
-    const ltft = parsePid(rawResponses['0107'] ?? '', '07');
-    const map = parsePid(rawResponses['010B'] ?? '', '0B');
-    const maf = parsePid(rawResponses['0110'] ?? '', '10');
+    if (options.includeDtcs !== false) {
+      for (const command of ['03', '07', '0A']) {
+        rawResponses[command] = await this.commandSafely(command);
+      }
+    }
 
-    if (rpm && rpm.length >= 4) telemetry.rpm = Number.parseInt(rpm.slice(0, 4), 16) / 4;
-    if (coolant && coolant.length >= 2)
-      telemetry.coolantC = Number.parseInt(coolant.slice(0, 2), 16) - 40;
-    if (voltage && voltage.length >= 4)
-      telemetry.voltageV = Number.parseInt(voltage.slice(0, 4), 16) / 1000;
-    if (stft && stft.length >= 2)
-      telemetry.stftPct = ((Number.parseInt(stft.slice(0, 2), 16) - 128) * 100) / 128;
-    if (ltft && ltft.length >= 2)
-      telemetry.ltftPct = ((Number.parseInt(ltft.slice(0, 2), 16) - 128) * 100) / 128;
-    if (map && map.length >= 2) telemetry.mapKpa = Number.parseInt(map.slice(0, 2), 16);
-    if (maf && maf.length >= 4) telemetry.mafGps = Number.parseInt(maf.slice(0, 4), 16) / 100;
+    const dtcGroups = parseDtcGroups(rawResponses);
+    const supportedPids = [...this.supportedPids].map(formatPid);
+    const missingPids = ESSENTIAL_PIDS.filter((item) => !this.supportedPids.has(item.pid)).map(
+      (item) => item.command,
+    );
+    const quality = calculateSnapshotQuality({
+      rawResponses,
+      supportedPids,
+      protocol: this.protocol,
+    });
 
     return {
       capturedAt: new Date().toISOString(),
-      dtcs: parseDtcs(rawResponses['03'] ?? ''),
-      telemetry,
+      dtcs: flattenDtcs(dtcGroups),
+      dtcGroups,
+      telemetry: parseTelemetry(rawResponses),
       rawResponses,
+      protocol: this.protocol,
+      supportedPids,
+      missingPids,
+      pidBitmaps: this.pidBitmaps,
+      quality,
     };
+  }
+
+  async clearDiagnosticTroubleCodes() {
+    this.ensureConnected();
+    const response = await this.command('04');
+    if (/ERROR|NO DATA|UNABLE/i.test(response)) {
+      throw new Error('O veículo não confirmou a limpeza dos códigos.');
+    }
+    return response;
   }
 
   async disconnect() {
@@ -182,12 +206,39 @@ export class ObdBleService {
     }
     this.device = null;
     this.endpoint = null;
+    this.protocol = null;
+    this.supportedPids.clear();
+    this.pidBitmaps = {};
   }
 
   destroy() {
     void this.disconnect();
     void this.stopScan();
     this.manager.destroy();
+  }
+
+  private async refreshCapabilities() {
+    const protocolResponse = await this.commandSafely('ATDP');
+    this.protocol = protocolFromResponse(protocolResponse);
+
+    const supported = new Set<number>();
+    const bitmaps: Record<string, string> = {};
+    let queryNextBitmap = true;
+    for (const command of PID_DISCOVERY_COMMANDS) {
+      if (!queryNextBitmap) break;
+      const response = await this.commandSafely(command);
+      bitmaps[command] = response;
+      const basePid = Number.parseInt(command.slice(2), 16);
+      const current = parseSupportedPidBitmap(response, basePid);
+      current.forEach((pid) => supported.add(pid));
+      queryNextBitmap = current.includes(basePid + 0x20);
+    }
+    this.supportedPids = supported;
+    this.pidBitmaps = bitmaps;
+  }
+
+  private async commandSafely(command: string) {
+    return this.command(command).catch((error: Error) => error.message);
   }
 
   private async resolveEndpoint(device: Device): Promise<Endpoint> {
@@ -250,10 +301,11 @@ export class ObdBleService {
       this.pendingResponse = { resolve, reject, buffer: '', timer };
     });
 
-    const payload = encodeBase64(`${command}\r`);
-    const endpoint = this.endpoint;
-    const device = this.device;
-    if (endpoint && device) {
+    try {
+      const payload = encodeBase64(`${command}\r`);
+      const endpoint = this.endpoint;
+      const device = this.device;
+      if (!endpoint || !device) throw new Error('Adaptador OBD-II desconectado.');
       const characteristics = await device.characteristicsForService(endpoint.serviceUuid);
       const write = characteristics.find((item) => item.uuid === endpoint.writeUuid);
       if (write?.isWritableWithResponse) {
@@ -262,13 +314,22 @@ export class ObdBleService {
           endpoint.writeUuid,
           payload,
         );
-      } else {
+      } else if (write?.isWritableWithoutResponse) {
         await device.writeCharacteristicWithoutResponseForService(
           endpoint.serviceUuid,
           endpoint.writeUuid,
           payload,
         );
+      } else {
+        throw new Error('O adaptador não possui uma característica BLE gravável.');
       }
+    } catch (cause) {
+      const pending = this.pendingResponse as PendingResponse | null;
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingResponse = null;
+      }
+      throw cause;
     }
     return response;
   }

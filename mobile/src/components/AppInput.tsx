@@ -1,4 +1,5 @@
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import type { TextInputProps } from 'react-native';
 
 import { colors } from '../theme/colors';
 
@@ -9,6 +10,7 @@ type Props = {
   placeholder?: string;
   keyboardType?: 'default' | 'decimal-pad' | 'numeric' | 'email-address';
   secureTextEntry?: boolean;
+  autoCapitalize?: TextInputProps['autoCapitalize'];
 };
 
 export function AppInput({
@@ -18,12 +20,13 @@ export function AppInput({
   placeholder,
   keyboardType = 'default',
   secureTextEntry = false,
+  autoCapitalize,
 }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
+        autoCapitalize={autoCapitalize ?? (keyboardType === 'email-address' ? 'none' : 'sentences')}
         keyboardType={keyboardType}
         onChangeText={onChangeText}
         placeholder={placeholder}
